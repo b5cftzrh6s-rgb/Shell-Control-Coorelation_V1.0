@@ -458,13 +458,14 @@
                     const hour = parseHour(dateVal);
                     const shift = assignShift(hour);
 
+                    const initialDensityTimesSensor = (density !== null && !isNaN(density)) ? (density * sensorVal) : null;
                     pairedData.push({
                         date: dateVal, shift: shift, cupType: cupType,
                         manual: manualVal, sensor: sensorVal, cst: calculatedCSt,
                         tempF: tempF, density: density,
                         compSensor: null, compCst: null,
-                        densityTimesSensor: null, densityTimesComp: null, densityCompSensor: null,
-                        difference: sensorVal - calculatedCSt, compDifference: null
+                        densityTimesSensor: initialDensityTimesSensor, densityCompSensor: null,
+                        difference: (density !== null && !isNaN(density)) ? (calculatedCSt - initialDensityTimesSensor) : (calculatedCSt - sensorVal), compDifference: null
                     });
                 }
 
@@ -520,7 +521,7 @@
                     row.compSensor = calculateArrheniusCompensated(row.sensor, row.tempF, refTempF, A);
                     row.compCst = calculateArrheniusCompensated(row.cst, row.tempF, refTempF, A);
                     if (row.density !== null && !isNaN(row.density) && row.compCst !== null) {
-                        row.densityTimesComp = row.density * row.compCst;
+                        // density * compCst column removed per request (no longer calculated or displayed)
                     }
                     // Calculate density-adjusted compensated sensor value when density is present
                     if (row.density !== null && !isNaN(row.density) && row.compSensor !== null) {
@@ -529,7 +530,11 @@
                         row.densityCompSensor = null;
                     }
                     if (row.compSensor !== null && row.compCst !== null) {
-                        row.compDifference = row.compSensor - row.compCst;
+                        if (row.density !== null && !isNaN(row.density)) {
+                            row.compDifference = row.compCst - (row.density * row.compSensor);
+                        } else {
+                            row.compDifference = row.compCst - row.compSensor;
+                        }
                     } else {
                         row.compDifference = null;
                     }
@@ -537,11 +542,11 @@
                     row.compSensor = null;
                     row.compCst = null;
                     row.compDifference = null;
-                    row.densityTimesComp = null;
                     row.densityCompSensor = null;
                 }
                 if (row.density !== null && !isNaN(row.density)) {
                     row.densityTimesSensor = row.density * row.sensor;
+                    row.difference = row.cst - row.densityTimesSensor;
                 }
             });
 
@@ -570,7 +575,7 @@
             document.getElementById("compFactorA").value = "1800";
             currentFilteredData = [...pairedData];
             currentFilteredData.forEach(row => {
-                row.compSensor = null; row.compCst = null; row.compDifference = null; row.densityTimesComp = null; row.densityCompSensor = null;
+                row.compSensor = null; row.compCst = null; row.compDifference = null; row.densityCompSensor = null;
             });
             renderAll();
         }
@@ -745,7 +750,7 @@
             let headerHTML = `<tr>
                 <th>Date/Time</th><th>Shift</th><th>Cup</th><th>Temperature (°F)</th>
                 <th>Temp Comp. Sensor cSt</th><th>Cup Calc cSt Temp Comp.</th>`;
-            if (hasDensity) headerHTML += `<th>Density × Temp Comp. Sensor cSt</th><th>Density × Temp Comp. cSt</th>`;
+            if (hasDensity) headerHTML += `<th>Density × Temp Comp. Sensor cSt</th>`;
             headerHTML += `<th>Temp Comp. Difference</th></tr>`;
             thead.innerHTML = headerHTML;
 
@@ -760,14 +765,8 @@
                 if (hasDensity) {
                     const densityCompSensorVal = (row.density !== null && row.compSensor !== null) ? (row.density * row.compSensor).toFixed(1) : "—";
                     html += `<td>${densityCompSensorVal}</td>`;
-                    html += `<td>${row.densityTimesComp !== null ? row.densityTimesComp.toFixed(1) : "—"}</td>`;
                 }
-                // If density is selected, difference uses density-adjusted comp sensor
-                let diffVal = row.compDifference;
-                if (hasDensity && row.density !== null && row.compSensor !== null && row.compCst !== null) {
-                    diffVal = (row.density * row.compSensor) - row.compCst;
-                }
-                html += `<td>${diffVal !== null ? diffVal.toFixed(1) : "—"}</td></tr>`;
+                html += `<td>${row.compDifference !== null ? row.compDifference.toFixed(1) : "—"}</td></tr>`;
                 tr.innerHTML = html;
                 tbody.appendChild(tr);
             });
@@ -784,7 +783,6 @@
             csv += ",Calculated_cSt";
             if (hasComp) csv += ",TempComp_cSt";
             if (hasDensity) csv += ",Density,Density_x_Sensor_cSt";
-            if (hasComp && hasDensity) csv += ",Density_x_TempComp_cSt";
             if (hasTemp) csv += ",Temp_F";
             csv += ",Difference";
             if (hasComp) csv += ",TempComp_Difference";
@@ -796,7 +794,6 @@
                 csv += `,${r.cst.toFixed(2)}`;
                 if (hasComp) csv += `,${r.compCst !== null ? r.compCst.toFixed(2) : ""}`;
                 if (hasDensity) csv += `,${r.density !== null ? r.density.toFixed(3) : ""},${r.densityTimesSensor !== null ? r.densityTimesSensor.toFixed(2) : ""}`;
-                if (hasComp && hasDensity) csv += `,${r.densityTimesComp !== null ? r.densityTimesComp.toFixed(2) : ""}`;
                 if (hasTemp) csv += `,${r.tempF !== null ? r.tempF.toFixed(1) : ""}`;
                 csv += `,${r.difference.toFixed(2)}`;
                 if (hasComp) csv += `,${r.compDifference !== null ? r.compDifference.toFixed(2) : ""}`;
