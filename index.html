@@ -250,9 +250,9 @@
         let pairedData = [];
         let currentFilteredData = [];
         let shiftDefinitions = [
-            { name: "Shift 1", start: 6 },
-            { name: "Shift 2", start: 14 },
-            { name: "Shift 3", start: 22 }
+            { name: "Day Shift",     start: "06:00", end: "14:00" },
+            { name: "Afternoon Shift", start: "14:00", end: "22:00" },
+            { name: "Night Shift",   start: "22:00", end: "06:00" }
         ];
         let scatterChartInstance = null;
         let currentCupType = "";
@@ -378,18 +378,35 @@
             return sorted.length % 2 !== 0 ? sorted[mid] : (sorted[mid-1] + sorted[mid]) / 2;
         }
 
-        function parseHour(dateStr) {
-            if (!dateStr) return null;
-            const match = dateStr.toString().match(/(\d{1,2}):(\d{2})/);
-            return match ? parseInt(match[1], 10) : null;
+        function timeToMinutes(timeStr) {
+            if (!timeStr) return 0;
+            const parts = timeStr.toString().split(':');
+            const h = parseInt(parts[0], 10) || 0;
+            const m = parseInt(parts[1], 10) || 0;
+            return h * 60 + m;
         }
 
-        function assignShift(hour) {
-            if (hour === null) return "Unassigned";
+        function assignShift(dateStr) {
+            if (!dateStr) return "Unassigned";
+            const match = dateStr.toString().match(/(\d{1,2}):(\d{2})/);
+            if (!match) return "Unassigned";
+            
+            const hour = parseInt(match[1], 10);
+            const min = parseInt(match[2], 10);
+            const minutes = hour * 60 + min;
+
             for (const shift of shiftDefinitions) {
-                if (hour >= shift.start && hour < shift.start + 8) return shift.name;
+                const s = timeToMinutes(shift.start);
+                const e = timeToMinutes(shift.end);
+                
+                if (s < e) {
+                    // Normal shift (does not cross midnight)
+                    if (minutes >= s && minutes < e) return shift.name;
+                } else {
+                    // Shift crosses midnight (e.g. 22:00 → 06:00)
+                    if (minutes >= s || minutes < e) return shift.name;
+                }
             }
-            if (hour >= 22 || hour < 6) return shiftDefinitions[shiftDefinitions.length-1]?.name || "Unassigned";
             return "Unassigned";
         }
 
@@ -398,19 +415,30 @@
             container.innerHTML = "";
             shiftDefinitions.forEach((shift, idx) => {
                 const div = document.createElement("div");
-                div.style.cssText = "display:flex; gap:8px; margin-bottom:6px; align-items:center;";
+                div.style.cssText = "display:flex; gap:8px; margin-bottom:8px; align-items:center; flex-wrap:wrap;";
                 div.innerHTML = `
-                    <input value="${shift.name}" style="flex:2;" onchange="shiftDefinitions[${idx}].name = this.value">
-                    <span style="color:#888;">starts at</span>
-                    <input type="number" value="${shift.start}" style="flex:1; max-width:70px;" onchange="shiftDefinitions[${idx}].start = parseInt(this.value)">
-                    <button onclick="removeShift(${idx})" class="secondary" style="padding:4px 10px; font-size:0.75rem;">×</button>
+                    <input value="${shift.name}" style="flex:2; min-width:120px;" 
+                           onchange="shiftDefinitions[${idx}].name = this.value" placeholder="Shift name">
+                    <div style="display:flex; align-items:center; gap:4px; flex:1; min-width:200px;">
+                        <input type="time" value="${shift.start}" style="flex:1; max-width:110px;"
+                               onchange="shiftDefinitions[${idx}].start = this.value">
+                        <span style="color:#888; font-size:0.85rem;">to</span>
+                        <input type="time" value="${shift.end}" style="flex:1; max-width:110px;"
+                               onchange="shiftDefinitions[${idx}].end = this.value">
+                    </div>
+                    <button onclick="removeShift(${idx})" class="secondary" style="padding:4px 10px; font-size:0.75rem; flex-shrink:0;">×</button>
                 `;
                 container.appendChild(div);
             });
         }
 
         function addShift() {
-            shiftDefinitions.push({ name: `Shift ${shiftDefinitions.length + 1}`, start: 6 });
+            const newNum = shiftDefinitions.length + 1;
+            shiftDefinitions.push({ 
+                name: `Shift ${newNum}`, 
+                start: "06:00", 
+                end: "14:00" 
+            });
             renderShiftDefinitions();
         }
 
@@ -455,8 +483,7 @@
                     const tempF = (tempColIdx !== null && row[tempColIdx]) ? parseFloat(row[tempColIdx]) : null;
                     const density = (densityColIdx !== null && row[densityColIdx]) ? parseFloat(row[densityColIdx]) : null;
 
-                    const hour = parseHour(dateVal);
-                    const shift = assignShift(hour);
+                    const shift = assignShift(dateVal);
 
                     const initialDensityTimesSensor = (density !== null && !isNaN(density)) ? (density * sensorVal) : null;
                     pairedData.push({
