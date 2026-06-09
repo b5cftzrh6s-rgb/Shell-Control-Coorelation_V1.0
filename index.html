@@ -76,6 +76,24 @@
                     <div class="metric"><div class="metric-value" id="baselineStd">—</div><div>Std Dev of Difference</div></div>
                     <div class="metric"><div class="metric-value" id="baselinePoints">—</div><div>Paired Points</div></div>
                 </div>
+
+                <!-- NEW: Full stats for Cup and Sensor -->
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:20px; margin-top:16px;">
+                    <div>
+                        <strong style="color:#00d4ff;">Cup Seconds</strong>
+                        <div class="spec-row"><span>Min</span><span id="cupMin">—</span></div>
+                        <div class="spec-row"><span>Max</span><span id="cupMax">—</span></div>
+                        <div class="spec-row"><span>Average</span><span id="cupAvg">—</span></div>
+                        <div class="spec-row"><span>Std Dev</span><span id="cupStd">—</span></div>
+                    </div>
+                    <div>
+                        <strong style="color:#00d4ff;">Sensor Value</strong>
+                        <div class="spec-row"><span>Min</span><span id="sensorMin">—</span></div>
+                        <div class="spec-row"><span>Max</span><span id="sensorMax">—</span></div>
+                        <div class="spec-row"><span>Average</span><span id="sensorAvg">—</span></div>
+                        <div class="spec-row"><span>Std Dev</span><span id="sensorStd">—</span></div>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -119,13 +137,6 @@
                         <thead></thead>
                         <tbody></tbody>
                     </table>
-                </div>
-            </div>
-
-            <div class="card">
-                <div class="section-title">Scatter Plot: Cup Seconds vs Sensor Value</div>
-                <div class="chart-container">
-                    <canvas id="scatterChart"></canvas>
                 </div>
             </div>
         </div>
@@ -224,7 +235,7 @@
                     else continue;
                 }
 
-                if (sensorVal < 0) continue; // Exclude negative sensor values
+                if (sensorVal < 0) continue;
 
                 const calcCst = calculateCSt(manualSec, cupType);
                 if (calcCst === null) continue;
@@ -249,11 +260,23 @@
             document.getElementById('cleanedPoints').textContent = cleanedData.length;
             document.getElementById('filteredPoints').textContent = currentData.length;
 
-            const x = currentData.map(d => d.manualSec);
-            const y = currentData.map(d => d.sensorVal);
-            document.getElementById('baselineR2').textContent = calculateR2(x, y).toFixed(3);
-            document.getElementById('baselineStd').textContent = standardDeviation(currentData.map(d => d.difference)).toFixed(2);
-            document.getElementById('baselinePoints').textContent = currentData.length;
+            // NEW: Full stats for Cup and Sensor in Baseline
+            const cupVals = cleanedData.map(d => d.manualSec);
+            const sensorVals = cleanedData.map(d => d.sensorVal);
+
+            document.getElementById('baselineR2').textContent = calculateR2(cupVals, sensorVals).toFixed(3);
+            document.getElementById('baselineStd').textContent = standardDeviation(cleanedData.map(d => d.difference)).toFixed(2);
+            document.getElementById('baselinePoints').textContent = cleanedData.length;
+
+            document.getElementById('cupMin').textContent = Math.min(...cupVals).toFixed(2);
+            document.getElementById('cupMax').textContent = Math.max(...cupVals).toFixed(2);
+            document.getElementById('cupAvg').textContent = (cupVals.reduce((a,b)=>a+b,0)/cupVals.length).toFixed(2);
+            document.getElementById('cupStd').textContent = standardDeviation(cupVals).toFixed(2);
+
+            document.getElementById('sensorMin').textContent = Math.min(...sensorVals).toFixed(1);
+            document.getElementById('sensorMax').textContent = Math.max(...sensorVals).toFixed(1);
+            document.getElementById('sensorAvg').textContent = (sensorVals.reduce((a,b)=>a+b,0)/sensorVals.length).toFixed(1);
+            document.getElementById('sensorStd').textContent = standardDeviation(sensorVals).toFixed(1);
 
             document.getElementById('baselineSection').style.display = 'block';
             document.getElementById('limitsSection').style.display = 'block';
@@ -306,10 +329,10 @@
             const cupIn = cleanedData.filter(d => (!isNaN(mLSL) && !isNaN(mUSL)) ? (d.manualSec >= mLSL && d.manualSec <= mUSL) : true).length;
             const sensorIn = cleanedData.filter(d => (!isNaN(sLSL) && !isNaN(sUSL)) ? (d.sensorVal >= sLSL && d.sensorVal <= sUSL) : true).length;
 
+            // REMOVED the "Current R² after limits" line
             document.getElementById('specResults').innerHTML = `
                 <div class="spec-row"><span>Cup Seconds in spec:</span> <strong>${cupIn} / ${total} (${((cupIn/total)*100).toFixed(1)}%)</strong></div>
                 <div class="spec-row"><span>Sensor Value in spec:</span> <strong>${sensorIn} / ${total} (${((sensorIn/total)*100).toFixed(1)}%)</strong></div>
-                <div style="margin-top:8px;"><strong>Current R² (after limits):</strong> ${r2.toFixed(3)}</div>
             `;
 
             renderTable();
@@ -405,7 +428,7 @@
             tbody.innerHTML = '';
 
             const headerRow = document.createElement('tr');
-            ['Date/Time', 'Cup Seconds', 'Sensor Value', 'Difference'].forEach(text => {
+            ['Date/Time', 'Cup Seconds', 'Sensor Value', 'Calculated cSt', 'Calc cSt / Sensor', 'Difference'].forEach(text => {
                 const th = document.createElement('th');
                 th.textContent = text;
                 headerRow.appendChild(th);
@@ -413,11 +436,14 @@
             thead.appendChild(headerRow);
 
             currentData.forEach(row => {
+                const calcCstDivSensor = row.sensorVal !== 0 ? (row.calcCst / row.sensorVal).toFixed(3) : '—';
                 const tr = document.createElement('tr');
                 tr.innerHTML = `
                     <td>${row.dateTime}</td>
                     <td>${row.manualSec.toFixed(2)}</td>
                     <td>${row.sensorVal.toFixed(1)}</td>
+                    <td>${row.calcCst.toFixed(1)}</td>
+                    <td>${calcCstDivSensor}</td>
                     <td>${row.difference.toFixed(1)}</td>
                 `;
                 tbody.appendChild(tr);
@@ -447,9 +473,10 @@
         function downloadCSV() {
             if (!currentData.length) return;
 
-            let csv = 'DateTime,Cup_Seconds,Sensor_Value,Difference\n';
+            let csv = 'DateTime,Cup_Seconds,Sensor_Value,Calculated_cSt,Calc_cSt_Divided_by_Sensor,Difference\n';
             currentData.forEach(r => {
-                csv += `${r.dateTime},${r.manualSec},${r.sensorVal},${r.difference}\n`;
+                const calcCstDivSensor = r.sensorVal !== 0 ? (r.calcCst / r.sensorVal).toFixed(4) : '';
+                csv += `${r.dateTime},${r.manualSec},${r.sensorVal},${r.calcCst},${calcCstDivSensor},${r.difference}\n`;
             });
 
             // Add STD filter results at the bottom
@@ -458,7 +485,7 @@
                 const meanDiff = diffs.reduce((a,b)=>a+b,0) / diffs.length;
                 const stdDiff = standardDeviation(diffs);
 
-                csv += '\n# Difference STD Filter Results (k values)\n';
+                csv += '\n# Difference STD Filter Results\n';
                 const kValues = [0.5, 1.0, 1.5, 2.0];
                 kValues.forEach(k => {
                     const filtered = currentData.filter(d => Math.abs(d.difference - meanDiff) <= (k * stdDiff));
